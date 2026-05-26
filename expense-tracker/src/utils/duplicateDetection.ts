@@ -1,39 +1,33 @@
 import type { Transaction } from '../types';
-
-const CAL_BANK_KEYWORDS = ['כאל', 'cal', 'חברת כאל', 'כרטיס אשראי', 'ישראכרט', 'visa cal'];
+import { isLikelyCalPayment } from './categories';
 
 export function detectDirectDebitDuplicates(transactions: Transaction[]): Transaction[] {
   const bankTxns = transactions.filter(t => t.source === 'mercantile');
   const calTxns = transactions.filter(t => t.source === 'cal');
 
-  if (calTxns.length === 0 || bankTxns.length === 0) return transactions;
-
-  // Group CAL transactions by billing month to find monthly totals
-  const calByBillingMonth = new Map<string, { total: number; ids: string[] }>();
-  for (const tx of calTxns) {
-    const billingDate = tx.rawRow?.billingDate ? new Date(tx.rawRow.billingDate) : tx.date;
-    const key = `${billingDate.getFullYear()}-${billingDate.getMonth()}`;
-    const existing = calByBillingMonth.get(key) ?? { total: 0, ids: [] };
-    existing.total += Math.abs(tx.amount);
-    existing.ids.push(tx.id);
-    calByBillingMonth.set(key, existing);
-  }
-
-  // Find bank transactions that look like CAL payment debits
   const markedDuplicates = new Set<string>();
 
   for (const bankTx of bankTxns) {
-    const desc = bankTx.description.toLowerCase();
-    const isCalPayment = CAL_BANK_KEYWORDS.some(k => desc.includes(k));
-    if (!isCalPayment) continue;
+    // Auto-mark any bank entry that describes a credit card charge as direct debit
+    if (isLikelyCalPayment(bankTx.description)) {
+      markedDuplicates.add(bankTx.id);
+      continue;
+    }
 
-    for (const calGroup of calByBillingMonth.values()) {
+    // If CAL file is loaded, also try to match by amount to catch other patterns
+    if (calTxns.length > 0) {
+      const calByBillingMonth = new Map<string, number>();
+      for (const tx of calTxns) {
+        const billingDate = tx.rawRow?.billingDate ? new Date(tx.rawRow.billingDate) : tx.date;
+        const key = `${billingDate.getFullYear()}-${billingDate.getMonth()}`;
+        calByBillingMonth.set(key, (calByBillingMonth.get(key) ?? 0) + Math.abs(tx.amount));
+      }
       const bankAmt = Math.abs(bankTx.amount);
-      const calAmt = calGroup.total;
-      // Allow 5% tolerance for fees
-      if (Math.abs(bankAmt - calAmt) / calAmt < 0.05) {
-        markedDuplicates.add(bankTx.id);
-        break;
+      for (const calAmt of calByBillingMonth.values()) {
+        if (calAmt > 0 && Math.abs(bankAmt - calAmt) / calAmt < 0.05) {
+          markedDuplicates.add(bankTx.id);
+          break;
+        }
       }
     }
   }

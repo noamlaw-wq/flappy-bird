@@ -14,6 +14,8 @@ interface TransactionStore {
   updateCategory: (id: string, category: TransactionCategory) => void;
   toggleHideDirectDebit: () => void;
   clearAll: () => void;
+  getExpenses: () => Transaction[];
+  getIncome: () => Transaction[];
   getVisible: () => Transaction[];
   getMonthlyStats: () => MonthlyStatItem[];
 }
@@ -23,6 +25,7 @@ export interface MonthlyStatItem {
   month: number;
   year: number;
   total: number;
+  income: number;
   byCategory: Partial<Record<TransactionCategory, number>>;
 }
 
@@ -35,8 +38,7 @@ export const useTransactions = create<TransactionStore>()(
       addTransactions: (newTxns) => {
         set(state => {
           const combined = [...state.transactions, ...newTxns];
-          const deduped = detectDirectDebitDuplicates(combined);
-          return { transactions: deduped };
+          return { transactions: detectDirectDebitDuplicates(combined) };
         });
       },
 
@@ -52,23 +54,37 @@ export const useTransactions = create<TransactionStore>()(
         }));
       },
 
-      toggleHideDirectDebit: () => {
-        set(state => ({ hideDirectDebit: !state.hideDirectDebit }));
-      },
+      toggleHideDirectDebit: () => set(state => ({ hideDirectDebit: !state.hideDirectDebit })),
 
       clearAll: () => set({ transactions: [] }),
 
-      getVisible: () => {
+      getExpenses: () => {
         const { transactions, hideDirectDebit } = get();
         const expenses = transactions.filter(t => t.amount < 0);
         return hideDirectDebit ? expenses.filter(t => !t.isCalDirectDebit) : expenses;
       },
 
+      getIncome: () => {
+        const { transactions } = get();
+        // Income = positive amounts from bank (salary, transfers in)
+        return transactions.filter(t => t.source === 'mercantile' && t.amount > 0);
+      },
+
+      // For the transaction list: show all (expenses + income), excluding hidden duplicates
+      getVisible: () => {
+        const { transactions, hideDirectDebit } = get();
+        const filtered = hideDirectDebit
+          ? transactions.filter(t => !t.isCalDirectDebit)
+          : transactions;
+        return filtered;
+      },
+
       getMonthlyStats: () => {
-        const visible = get().getVisible();
+        const expenses = get().getExpenses();
+        const income = get().getIncome();
         const map = new Map<string, MonthlyStatItem>();
 
-        for (const tx of visible) {
+        const ensureMonth = (tx: Transaction) => {
           const key = `${tx.date.getFullYear()}-${tx.date.getMonth()}`;
           if (!map.has(key)) {
             map.set(key, {
@@ -76,13 +92,23 @@ export const useTransactions = create<TransactionStore>()(
               month: tx.date.getMonth(),
               year: tx.date.getFullYear(),
               total: 0,
+              income: 0,
               byCategory: {},
             });
           }
-          const stat = map.get(key)!;
+          return map.get(key)!;
+        };
+
+        for (const tx of expenses) {
+          const stat = ensureMonth(tx);
           const abs = Math.abs(tx.amount);
           stat.total += abs;
           stat.byCategory[tx.category] = (stat.byCategory[tx.category] ?? 0) + abs;
+        }
+
+        for (const tx of income) {
+          const stat = ensureMonth(tx);
+          stat.income += tx.amount;
         }
 
         return Array.from(map.values()).sort((a, b) =>
@@ -91,8 +117,7 @@ export const useTransactions = create<TransactionStore>()(
       },
     }),
     {
-      name: 'expense-tracker-v1',
-      // Date objects need special serialization
+      name: 'expense-tracker-v2',
       partialize: (state) => ({ transactions: state.transactions, hideDirectDebit: state.hideDirectDebit }),
       onRehydrateStorage: () => (state) => {
         if (state?.transactions) {
@@ -100,8 +125,7 @@ export const useTransactions = create<TransactionStore>()(
             ...t,
             date: new Date(t.date),
           }));
-          const rerun = detectDirectDebitDuplicates(state.transactions);
-          state.transactions = rerun;
+          state.transactions = detectDirectDebitDuplicates(state.transactions);
         }
       },
     }
