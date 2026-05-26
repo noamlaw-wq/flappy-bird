@@ -3,10 +3,12 @@ import { v4 as uuidv4 } from '../utils/uuid';
 import type { Transaction, TransactionSource, ImportResult } from '../types';
 import { detectCategory } from './categories';
 
-function parseHebrewDate(dateStr: string): Date | null {
+function parseHebrewDate(dateStr: string | Date | number): Date | null {
+  // Already a Date object (from XLSX cellDates: true)
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
   if (!dateStr) return null;
   const cleaned = dateStr.toString().trim();
-  // DD/MM/YYYY or DD-MM-YYYY
+  // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
   const match = cleaned.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
   if (match) {
     const day = parseInt(match[1]);
@@ -15,11 +17,12 @@ function parseHebrewDate(dateStr: string): Date | null {
     const d = new Date(year, month, day);
     if (!isNaN(d.getTime())) return d;
   }
-  // Excel serial number
+  // Excel serial number (e.g. 46167 = May 26 2026)
   if (/^\d{4,6}$/.test(cleaned)) {
     const serial = parseInt(cleaned);
     if (serial > 40000 && serial < 60000) {
-      return XLSX.SSF.parse_date_code ? new Date((serial - 25569) * 86400 * 1000) : null;
+      // Excel epoch offset: serial 25569 = Jan 1, 1970
+      return new Date((serial - 25569) * 86400 * 1000);
     }
   }
   const d = new Date(cleaned);
@@ -57,9 +60,9 @@ export function parseWorkbook(file: File): Promise<XLSX.WorkBook> {
   });
 }
 
-function sheetToRows(sheet: XLSX.WorkSheet): string[][] {
-  const raw = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' });
-  return raw as string[][];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sheetToRows(sheet: XLSX.WorkSheet): any[][] {
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true }) as any[][];
 }
 
 function findHeaderRow(rows: string[][], keywords: string[]): number {
@@ -85,7 +88,9 @@ export async function parseMercantileFile(file: File): Promise<ImportResult> {
   const descCol = findColumn(headers, ['תיאור', 'פרטים', 'description', 'אסמכתא']) ?? headers[1];
   const debitCol = findColumn(headers, ['חיוב', 'debit', 'יציאה', 'הוצאה']);
   const creditCol = findColumn(headers, ['זכות', 'credit', 'כניסה', 'הכנסה']);
-  const amountCol = findColumn(headers, ['סכום', 'amount']);
+  // "₪ זכות/חובה" is a single combined column (positive=income, negative=expense)
+  const combinedCol = findColumn(headers, ['זכות/חובה', 'חובה/זכות']);
+  const amountCol = findColumn(headers, ['סכום', 'amount']) ?? (combinedCol ? combinedCol : null);
 
   const transactions: Transaction[] = [];
   let skipped = 0;
@@ -114,11 +119,12 @@ export async function parseMercantileFile(file: File): Promise<ImportResult> {
     if (amount === 0) { skipped++; continue; }
 
     const desc = rawDesc.toString().trim();
+    // Mercantile: negative = expense, positive = income — keep original sign
     transactions.push({
       id: uuidv4(),
       date,
       description: desc,
-      amount: amount < 0 ? amount : -amount, // expenses are negative
+      amount,
       source: 'mercantile',
       category: detectCategory(desc),
       importBatch: batchId,
