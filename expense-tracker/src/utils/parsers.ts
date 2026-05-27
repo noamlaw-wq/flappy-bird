@@ -4,11 +4,9 @@ import type { Transaction, TransactionSource, ImportResult } from '../types';
 import { detectCategory } from './categories';
 
 function parseHebrewDate(dateStr: string | Date | number): Date | null {
-  // Already a Date object (from XLSX cellDates: true)
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
   if (!dateStr) return null;
   const cleaned = dateStr.toString().trim();
-  // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
   const match = cleaned.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
   if (match) {
     const day = parseInt(match[1]);
@@ -17,16 +15,19 @@ function parseHebrewDate(dateStr: string | Date | number): Date | null {
     const d = new Date(year, month, day);
     if (!isNaN(d.getTime())) return d;
   }
-  // Excel serial number (e.g. 46167 = May 26 2026)
   if (/^\d{4,6}$/.test(cleaned)) {
     const serial = parseInt(cleaned);
     if (serial > 40000 && serial < 60000) {
-      // Excel epoch offset: serial 25569 = Jan 1, 1970
       return new Date((serial - 25569) * 86400 * 1000);
     }
   }
   const d = new Date(cleaned);
   return isNaN(d.getTime()) ? null : d;
+}
+
+// Normalize a Date to a stable "YYYY-MM-DD" key (UTC)
+export function dateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 function parseAmount(val: string | number): number {
@@ -78,19 +79,19 @@ export async function parseMercantileFile(file: File): Promise<ImportResult> {
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = sheetToRows(sheet);
 
-  // Find header row - look for date + debit/credit columns
   let headerIdx = findHeaderRow(rows, ['תאריך']);
   if (headerIdx === -1) headerIdx = findHeaderRow(rows, ['date']);
   if (headerIdx === -1) headerIdx = 0;
 
   const headers = rows[headerIdx].map(h => h?.toString().trim() ?? '');
   const dateCol = findColumn(headers, ['תאריך ערך', 'תאריך', 'date']) ?? headers[0];
+  // יום ערך = value date — used to match bank card entries to CAL billing dates
+  const valueDateCol = findColumn(headers, ['יום ערך', 'ערך']);
   const descCol = findColumn(headers, ['תיאור', 'פרטים', 'description', 'אסמכתא']) ?? headers[1];
   const debitCol = findColumn(headers, ['חיוב', 'debit', 'יציאה', 'הוצאה']);
   const creditCol = findColumn(headers, ['זכות', 'credit', 'כניסה', 'הכנסה']);
-  // "₪ זכות/חובה" is a single combined column (positive=income, negative=expense)
   const combinedCol = findColumn(headers, ['זכות/חובה', 'חובה/זכות']);
-  const amountCol = findColumn(headers, ['סכום', 'amount']) ?? (combinedCol ? combinedCol : null);
+  const amountCol = findColumn(headers, ['סכום', 'amount']) ?? (combinedCol ?? null);
 
   const transactions: Transaction[] = [];
   let skipped = 0;
@@ -119,15 +120,20 @@ export async function parseMercantileFile(file: File): Promise<ImportResult> {
     if (amount === 0) { skipped++; continue; }
 
     const desc = rawDesc.toString().trim();
-    // Mercantile: negative = expense, positive = income — keep original sign
+
+    // Store יום ערך for CAL matching (bank יום ערך = CAL מועד חיוב)
+    const rawValueDate = valueDateCol ? row[hIdx(valueDateCol)] : null;
+    const valueDate = rawValueDate ? parseHebrewDate(rawValueDate.toString()) : null;
+
     transactions.push({
       id: uuidv4(),
       date,
       description: desc,
-      amount,
+      amount, // negative = expense, positive = income
       source: 'mercantile',
       category: detectCategory(desc),
       importBatch: batchId,
+      rawRow: valueDate ? { valueDate: dateKey(valueDate) } : {},
     });
   }
 
@@ -153,7 +159,8 @@ export async function parseCalFile(file: File): Promise<ImportResult> {
   const dateCol = findColumn(headers, ['תאריך עסקה', 'תאריך', 'date']);
   const descCol = findColumn(headers, ['שם בית', 'בית עסק', 'פרטים', 'תיאור', 'description']);
   const amountCol = findColumn(headers, ['סכום לחיוב', 'סכום חיוב', 'סכום', 'amount', 'חיוב']);
-  const billingDateCol = findColumn(headers, ['תאריך חיוב', 'billing']);
+  // "מועד חיוב" = the date the bank account is debited — matches bank's "יום ערך"
+  const billingDateCol = findColumn(headers, ['תאריך חיוב', 'מועד', 'billing']);
 
   const transactions: Transaction[] = [];
   let skipped = 0;
@@ -183,11 +190,13 @@ export async function parseCalFile(file: File): Promise<ImportResult> {
       id: uuidv4(),
       date,
       description: desc,
-      amount: -Math.abs(amount), // CAL charges are expenses
+      // Keep original sign: positive = expense, negative = refund/credit
+      // We negate so our system uses negative = expense
+      amount: -amount,
       source: 'cal',
       category: detectCategory(desc),
       importBatch: batchId,
-      rawRow: billingDate ? { billingDate: billingDate.toISOString() } : undefined,
+      rawRow: billingDate ? { billingDate: dateKey(billingDate) } : {},
     });
   }
 
