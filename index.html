@@ -1,126 +1,19 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>פלאפי בירד</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;800&family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-  <!-- Login Screen -->
-  <div id="screen-login" class="screen active">
-    <div class="card">
-      <div class="logo-wrap"><span class="logo-bird">🐦</span></div>
-      <h1 class="game-title">פלאפי בירד</h1>
-      <h2 class="card-subtitle">התחברות</h2>
-      <div class="form-group">
-        <input type="text" id="login-username" placeholder="שם משתמש" autocomplete="username">
-      </div>
-      <div class="form-group">
-        <input type="password" id="login-password" placeholder="סיסמה" autocomplete="current-password">
-      </div>
-      <div id="login-error" class="error-msg hidden"></div>
-      <button id="login-btn" class="btn btn-primary">התחבר</button>
-      <p class="switch-link">אין לך חשבון? <a href="#" id="go-register">הירשם עכשיו</a></p>
-    </div>
-  </div>
-
-  <!-- Register Screen -->
-  <div id="screen-register" class="screen">
-    <div class="card">
-      <div class="logo-wrap"><span class="logo-bird">🐦</span></div>
-      <h1 class="game-title">פלאפי בירד</h1>
-      <h2 class="card-subtitle">הרשמה</h2>
-      <div class="form-group">
-        <input type="text" id="reg-username" placeholder="שם משתמש (לפחות 2 תווים)" autocomplete="username">
-      </div>
-      <div class="form-group">
-        <input type="password" id="reg-password" placeholder="סיסמה (לפחות 4 תווים)" autocomplete="new-password">
-      </div>
-      <div class="form-group">
-        <input type="password" id="reg-confirm" placeholder="אימות סיסמה" autocomplete="new-password">
-      </div>
-      <div id="reg-error" class="error-msg hidden"></div>
-      <button id="register-btn" class="btn btn-primary">הירשם</button>
-      <p class="switch-link">יש לך חשבון? <a href="#" id="go-login">התחבר</a></p>
-    </div>
-  </div>
-
-  <!-- Menu Screen -->
-  <div id="screen-menu" class="screen">
-    <div class="card wide">
-      <div class="menu-header">
-        <div class="logo-wrap small"><span class="logo-bird">🐦</span></div>
-        <h1 class="game-title">פלאפי בירד</h1>
-        <p id="welcome-msg" class="welcome-msg"></p>
-        <button id="logout-btn" class="btn btn-sm btn-ghost">יציאה ↩</button>
-      </div>
-
-      <div id="personal-best-box" class="stat-box hidden">
-        <span class="stat-label">🏅 השיא שלך</span>
-        <span id="personal-best-score" class="stat-value">0</span>
-      </div>
-
-      <div class="difficulty-section">
-        <h3 class="section-title">רמת קושי</h3>
-        <div class="diff-buttons">
-          <button class="btn btn-diff active" data-diff="easy">🟢 קל</button>
-          <button class="btn btn-diff" data-diff="medium">🟡 בינוני</button>
-          <button class="btn btn-diff" data-diff="hard">🔴 קשה</button>
-        </div>
-      </div>
-
-      <button id="start-btn" class="btn btn-primary btn-lg">▶ התחל משחק</button>
-
-      <div class="leaderboard-section">
-        <h3 class="section-title">🏆 לוח תוצאות</h3>
-        <div id="leaderboard-list" class="leaderboard-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Game Screen -->
-  <div id="screen-game" class="screen">
-    <div class="game-wrapper">
-      <div class="game-hud">
-        <button id="pause-btn" class="btn btn-sm btn-ghost hud-btn">⏸</button>
-        <span id="hud-score" class="hud-score">0</span>
-        <span id="hud-diff" class="hud-diff-badge"></span>
-      </div>
-      <canvas id="game-canvas"></canvas>
-      <div id="game-overlay" class="game-overlay hidden">
-        <p id="overlay-msg" class="overlay-msg"></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Game Over Screen -->
-  <div id="screen-gameover" class="screen">
-    <div class="card">
-      <div class="logo-wrap"><span class="logo-bird">💀</span></div>
-      <h2 class="card-subtitle">משחק נגמר!</h2>
-      <div class="score-row">
-        <div class="stat-box">
-          <span class="stat-label">ניקוד</span>
-          <span id="final-score" class="stat-value big">0</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-label">שיא אישי</span>
-          <span id="final-best" class="stat-value big">0</span>
-        </div>
-      </div>
-      <div id="new-record-badge" class="new-record hidden">🎉 שיא חדש!</div>
-      <div class="gameover-btns">
-        <button id="play-again-btn" class="btn btn-primary">🔄 שחק שוב</button>
-        <button id="menu-btn" class="btn btn-outline">🏠 תפריט</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="auth.js"></script>
-  <script src="game.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="פלטפורמה אישית ללימוד אנגלית למבוגרים" />
+    <title>Lingua · לימוד אנגלית</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
